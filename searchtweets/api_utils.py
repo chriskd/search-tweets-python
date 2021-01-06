@@ -81,7 +81,7 @@ def convert_utc_time(datetime_str):
 
     return _date.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-def gen_request_parameters(query, results_per_call=None,
+def gen_request_parameters(query=None, id=None, ids=None, usernames=None, api="search", results_per_call=None,
                            start_time=None, end_time=None, since_id=None, until_id=None,
                            tweet_fields=None, user_fields=None, media_fields=None,
                            place_fields=None, poll_fields=None,
@@ -118,8 +118,18 @@ def gen_request_parameters(query, results_per_call=None,
     """
 
     #Set endpoint request parameter to command-line arguments. This is where 'translation' happens.
-    query = ' '.join(query.split())  # allows multi-line strings
-    payload = {"query": query}
+    #if query: query = ' '.join(query.split()) # allows multi-line strings
+    #payload = {"query": query}
+    if api == "search":
+        query = ' '.join(query.split()) # allows multi-line strings
+        payload = {"query": query}
+    elif api == "users" or api == "tweets":
+        payload = {"ids": ','.join(ids)}
+    elif api == "users_by_name":
+        payload = {"usernames": ','.join(ids)}
+    else:
+        payload = {}
+    
     if results_per_call is not None and isinstance(results_per_call, int) is True:
         payload["max_results"] = results_per_call
     if start_time:
@@ -131,8 +141,10 @@ def gen_request_parameters(query, results_per_call=None,
     if until_id:
         payload["until_id"] = until_id
     if tweet_fields:
+        tweet_fields = ''.join(tweet_fields.split())
         payload["tweet.fields"] = tweet_fields
     if user_fields:
+        user_fields = ''.join(user_fields.split())
         payload["user.fields"] = user_fields
     if media_fields:
         payload["media.fields"] = media_fields
@@ -141,10 +153,12 @@ def gen_request_parameters(query, results_per_call=None,
     if poll_fields:
         payload["poll.fields"] = poll_fields
     if expansions:
+        expansions = ''.join(expansions.split())
         payload["expansions"] = expansions
 
-    return json.dumps(payload) if stringify else payload
-
+    query_dict = {"api": api, "id": id, "payload": json.dumps(payload)}
+    return query_dict
+    #return json.dumps(payload) if stringify else payload
 
 def gen_params_from_config(config_dict):
     """
@@ -188,12 +202,7 @@ def gen_params_from_config(config_dict):
              "extra_headers_dict": config_dict.get("extra_headers_dict",None),
              "request_parameters": query,
              "results_per_file": intify(config_dict.get("results_per_file")),
-             "max_tweets": intify(config_dict.get("max_tweets")),
+             "max_results": intify(config_dict.get("max_results")),
              "max_pages": intify(config_dict.get("max_pages", None))}
 
     return _dict
-
-
-
-
-

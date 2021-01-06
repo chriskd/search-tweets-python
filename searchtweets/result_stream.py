@@ -151,9 +151,9 @@ class ResultStream:
 
         request_parameters (json or dict): payload for the post request
 
-        max_tweets (int): max number results that will be returned from this
+        max_results (int): max number results that will be returned from this
         instance. Note that this can be slightly lower than the total returned
-        from the API call  - e.g., setting ``max_tweets = 10`` would return
+        from the API call  - e.g., setting ``max_results = 10`` would return
         ten results, but an API call will return at minimum 100 results by default.
 
         max_requests (int): A hard cutoff for the number of API calls this
@@ -168,7 +168,7 @@ class ResultStream:
     # session, helping with usage of the convenience functions in the library.
     session_request_counter = 0
 
-    def __init__(self, endpoint, request_parameters, bearer_token=None, extra_headers_dict=None, max_tweets=500,
+    def __init__(self, uri, endpoint, request_parameters, bearer_token=None, extra_headers_dict=None, max_results=500,
                  max_requests=None, **kwargs):
 
         self.bearer_token = bearer_token
@@ -177,7 +177,7 @@ class ResultStream:
             request_parameters = json.loads(request_parameters)
         self.request_parameters = request_parameters
         # magic number of max tweets if you pass a non_int
-        self.max_tweets = (max_tweets if isinstance(max_tweets, int)
+        self.max_results = (max_results if isinstance(max_results, int)
                            else 10 ** 15)
 
         self.total_results = 0
@@ -190,12 +190,13 @@ class ResultStream:
         # magic number of requests!
         self.max_requests = (max_requests if max_requests is not None
                              else 10 ** 9)
+        self.uri = uri
         self.endpoint = endpoint
 
     def stream(self):
         """
         Main entry point for the data from the API. Will automatically paginate
-        through the results via the ``next`` token and return up to ``max_tweets``
+        through the results via the ``next`` token and return up to ``max_results``
         tweets or up to ``max_requests`` API calls, whichever is lower.
         Usage:
             >>> result_stream = ResultStream(**kwargs)
@@ -215,7 +216,7 @@ class ResultStream:
 
             #Serve up data.tweets.
             for tweet in self.current_tweets:
-                if self.total_results >= self.max_tweets:
+                if self.total_results >= self.max_results:
                     break
                 yield self._tweet_func(tweet)
                 self.total_results += 1
@@ -228,9 +229,13 @@ class ResultStream:
             if self.meta != None:
                 yield self.meta
 
-            if self.next_token and self.total_results < self.max_tweets and self.n_requests <= self.max_requests:
-                self.request_parameters = merge_dicts(self.request_parameters,
-                                                      {"next_token": self.next_token})
+            if self.next_token and self.total_results < self.max_results and self.n_requests <= self.max_requests:
+                if 'search' in self.uri:
+                    self.request_parameters = merge_dicts(self.request_parameters,
+                                                        {"next_token": self.next_token})
+                else:
+                    self.request_parameters = merge_dicts(self.request_parameters,
+                                                        {"pagination_token": self.next_token})
                 logger.info("paging; total requests read so far: {}"
                             .format(self.n_requests))
                 self.execute_request()
@@ -261,7 +266,7 @@ class ResultStream:
             self.init_session()
 
         resp = request(session=self.session,
-                       url=self.endpoint,
+                       url=self.endpoint + self.uri,
                        request_parameters=self.request_parameters)
         self.n_requests += 1
         ResultStream.session_request_counter += 1
@@ -271,19 +276,20 @@ class ResultStream:
             self.current_tweets = resp.get("data", None)
             self.includes = resp.get("includes", None)
             self.meta = resp.get("meta", None)
-            self.next_token = self.meta.get("next_token", None)
+            if self.meta:
+                self.next_token = self.meta.get("next_token", None)
 
         except:
             print("Error parsing content as JSON.")
 
     def __repr__(self):
-        repr_keys = ["endpoint", "request_parameters", "max_tweets"]
+        repr_keys = ["endpoint", "request_parameters", "max_results"]
         str_ = json.dumps(dict([(k, self.__dict__.get(k)) for k in repr_keys]),
                           indent=4)
         str_ = "ResultStream: \n\t" + str_
         return str_
 
-def collect_results(query, max_tweets=1000, result_stream_args=None):
+def collect_results(query, max_results=1000, result_stream_args=None):
     """
     Utility function to quickly get a list of tweets from a ``ResultStream``
     without keeping the object around. Requires your args to be configured
@@ -291,7 +297,7 @@ def collect_results(query, max_tweets=1000, result_stream_args=None):
     Args:
         query (str): valid powertrack rule for your account, preferably
         generated by the `gen_request_parameters` function.
-        max_tweets (int): maximum number of tweets or counts to return from
+        max_results (int): maximum number of tweets or counts to return from
         the API / underlying ``ResultStream`` object.
         result_stream_args (dict): configuration dict that has connection
         information for a ``ResultStream`` object.
@@ -300,7 +306,7 @@ def collect_results(query, max_tweets=1000, result_stream_args=None):
     Example:
         >>> from searchtweets import collect_results
         >>> tweets = collect_results(query,
-                                     max_tweets=500,
+                                     max_results=500,
                                      result_stream_args=search_args)
     """
     if result_stream_args is None:
@@ -308,7 +314,25 @@ def collect_results(query, max_tweets=1000, result_stream_args=None):
                      "inner ResultStream object.")
         raise KeyError
 
-    rs = ResultStream(request_parameters=query,
-                      max_tweets=max_tweets,
-                      **result_stream_args)
+    api = query["api"]
+    id = query["id"]
+    query_s = query["payload"]
+    
+    if 'search' == api:
+        uri = "tweets/search/recent"
+    elif 'followers' == api:
+        uri = f"users/{id}/followers"
+    elif 'following' == api:
+        uri = f"users/{id}/following"
+    elif 'users' == api:
+        uri = f"users"
+    elif 'users_by_name' == api:
+        uri = f"users/by"
+    elif 'tweets' == api:
+        uri = f"tweets"
+
+    rs = ResultStream(uri = uri,
+                    request_parameters=query_s,
+                    max_results=max_results,
+                    **result_stream_args)
     return list(rs.stream())
