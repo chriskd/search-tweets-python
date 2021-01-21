@@ -42,7 +42,7 @@ def make_session(bearer_token=None, extra_headers_dict=None):
                'User-Agent': 'twitterdev-search-tweets-python-labs/' + VERSION}
 
     if bearer_token:
-        logger.info("using bearer token for authentication")
+        logger.debug("using bearer token for authentication")
         headers['Authorization'] = "Bearer {}".format(bearer_token)
         session.headers = headers
 
@@ -242,7 +242,7 @@ class ResultStream:
             else:
                 break
 
-        logger.info("ending stream at {} tweets".format(self.total_results))
+        logger.debug("ending stream at {} results".format(self.total_results))
         self.current_tweets = None
         self.session.close()
 
