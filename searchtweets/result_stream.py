@@ -330,6 +330,8 @@ def collect_results(query, max_results=1000, result_stream_args=None):
         uri = f"users/by"
     elif 'tweets' == api:
         uri = f"tweets"
+    elif 'timeline' == api:
+        uri = f"users/{id}/tweets"
 
     rs = ResultStream(uri = uri,
                     request_parameters=query_s,
