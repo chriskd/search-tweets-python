@@ -9,6 +9,7 @@ request payload generation, and related.
 
 import re
 import datetime
+from string import Template
 from dateutil.relativedelta import *
 import logging
 try:
@@ -81,6 +82,20 @@ def convert_utc_time(datetime_str):
 
     return _date.strftime("%Y-%m-%dT%H:%M:%SZ")
 
+def translate_api_to_uri(api):
+    api_dict = {
+        'followers': Template('users/$id/followers'),
+        'following': Template('users/$id/following'),
+        'timeline': Template('users/$id/tweets'),
+        'retweeted_by': Template('tweets/$id/retweeted_by'),
+        'search': Template('tweets/search/recent'),
+        'users': Template('users'),
+        'users_by_name': Template('users/by'),
+        'tweets': Template('tweets')
+    }
+
+    return api_dict.get(api)
+
 def gen_request_parameters(query=None, id=None, ids=None, usernames=None, api="search", results_per_call=None,
                            start_time=None, end_time=None, since_id=None, until_id=None,
                            tweet_fields=None, user_fields=None, media_fields=None,
@@ -120,8 +135,11 @@ def gen_request_parameters(query=None, id=None, ids=None, usernames=None, api="s
     #Set endpoint request parameter to command-line arguments. This is where 'translation' happens.
     #if query: query = ' '.join(query.split()) # allows multi-line strings
     #payload = {"query": query}
+
+    uri = translate_api_to_uri(api).substitute(id=id)
+
     if api == "search":
-        query = ' '.join(query.split()) # allows multi-line strings
+        query = ' '.join(query.split()) 
         payload = {"query": query}
     elif api == "users" or api == "tweets":
         payload = {"ids": ','.join(ids)}
@@ -129,9 +147,7 @@ def gen_request_parameters(query=None, id=None, ids=None, usernames=None, api="s
         payload = {"usernames": ','.join(ids)}
     else:
         payload = {}
-    
-    if results_per_call is not None and isinstance(results_per_call, int) is True:
-        payload["max_results"] = results_per_call
+
     if start_time:
         payload["start_time"] = convert_utc_time(start_time)
     if end_time:
@@ -140,6 +156,9 @@ def gen_request_parameters(query=None, id=None, ids=None, usernames=None, api="s
         payload["since_id"] = since_id
     if until_id:
         payload["until_id"] = until_id
+    
+    if results_per_call is not None and isinstance(results_per_call, int) is True:
+        payload["max_results"] = results_per_call
     if tweet_fields:
         tweet_fields = ''.join(tweet_fields.split())
         payload["tweet.fields"] = tweet_fields
@@ -156,9 +175,9 @@ def gen_request_parameters(query=None, id=None, ids=None, usernames=None, api="s
         expansions = ''.join(expansions.split())
         payload["expansions"] = expansions
 
-    query_dict = {"api": api, "id": id, "payload": json.dumps(payload)}
+    payload = json.dumps(payload) if stringify else payload
+    query_dict = {"uri": uri, "payload": payload}
     return query_dict
-    #return json.dumps(payload) if stringify else payload
 
 def gen_params_from_config(config_dict):
     """

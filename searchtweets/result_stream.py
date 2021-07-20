@@ -97,7 +97,7 @@ def retry(func):
                 else:
                     #Other errors are a "one and done", no use in retrying error...
                     logger.error('Quitting... ')
-                    raise requests.exceptions.HTTPError
+                    resp.raise_for_status()
 
 
                 logger.error(f"Will retry in {sleep_seconds} seconds...")
@@ -314,27 +314,8 @@ def collect_results(query, max_results=1000, result_stream_args=None):
                      "inner ResultStream object.")
         raise KeyError
 
-    api = query["api"]
-    id = query["id"]
-    query_s = query["payload"]
-    
-    if 'search' == api:
-        uri = "tweets/search/recent"
-    elif 'followers' == api:
-        uri = f"users/{id}/followers"
-    elif 'following' == api:
-        uri = f"users/{id}/following"
-    elif 'users' == api:
-        uri = f"users"
-    elif 'users_by_name' == api:
-        uri = f"users/by"
-    elif 'tweets' == api:
-        uri = f"tweets"
-    elif 'timeline' == api:
-        uri = f"users/{id}/tweets"
-
-    rs = ResultStream(uri = uri,
-                    request_parameters=query_s,
-                    max_results=max_results,
-                    **result_stream_args)
+    rs = ResultStream(uri = query['uri'],
+                      request_parameters=query['payload'],
+                      max_results=max_results,
+                      **result_stream_args)
     return list(rs.stream())
